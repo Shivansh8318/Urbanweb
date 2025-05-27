@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from '../utils/axios';
 import { motion } from 'framer-motion';
 import useWebSocket from 'react-use-websocket';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
@@ -205,7 +204,11 @@ const StudentBooking = () => {
       console.error('Error fetching teachers:', error);
       console.error('Error response:', error.response?.data);
       setTeachers([]);
-      alert(`Failed to fetch teachers: ${error.response?.data?.message || error.message}`);
+      if (error.message === 'Received HTML response instead of JSON') {
+        alert('Server returned an invalid response. Please check if the API server is running correctly.');
+      } else {
+        alert(`Failed to fetch teachers: ${error.response?.data?.message || error.message}`);
+      }
     } finally {
       setIsLoadingTeachers(false);
     }

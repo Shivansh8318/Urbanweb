@@ -6,12 +6,12 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://7230-110-235-239-178.ngrok-free.app',
+        target: 'https://d2f4-110-235-239-178.ngrok-free.app',
         changeOrigin: true,
         secure: false,
       },
       '/ws': {
-        target: 'wss://7230-110-235-239-178.ngrok-free.app',
+        target: 'wss://d2f4-110-235-239-178.ngrok-free.app',
         ws: true,
         changeOrigin: true,
         secure: false,
