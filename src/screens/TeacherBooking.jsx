@@ -21,15 +21,16 @@ const TeacherBooking = () => {
   const [endTime, setEndTime] = useState('');
   const [upcomingSlots, setUpcomingSlots] = useState([]);
   const [bookedSlots, setBookedSlots] = useState([]);
+  const [pendingSlots, setPendingSlots] = useState([]); // New state for pending slots
   const [showMeeting, setShowMeeting] = useState(false);
 
   const { sendMessage, lastMessage } = useWebSocket(`/ws/booking/${userData.user_id}/`, {
     onOpen: () => {
-      console.log('WebSocket Connected');
+      console.log('WebSocket Connected for user:', userData.user_id);
       fetchSlots();
     },
     onError: (e) => {
-      console.error('WebSocket Error:', e);
+      console.error('WebSocket Error for user:', userData.user_id, e);
       alert('Connection error. Trying to reconnect...');
       fetchSlots();
     },
@@ -38,24 +39,28 @@ const TeacherBooking = () => {
 
   useEffect(() => {
     if (lastMessage) {
+      console.log('Received WebSocket message:', lastMessage.data);
       try {
         const data = JSON.parse(lastMessage.data);
-        if (data.type === 'slot_update') {
-          if (data.action === 'added') {
-            setUpcomingSlots((prev) => {
-              if (prev.some((slot) => slot.id === data.slot.id)) return prev;
-              return [...prev, data.slot].sort((a, b) => new Date(a.date) - new Date(b.date) || a.start_time.localeCompare(b.start_time));
-            });
-          } else if (data.action === 'deleted') {
-            setUpcomingSlots((prev) => prev.filter((slot) => slot.id !== data.slot_id));
-          }
-          setTimeout(() => fetchSlots(), 500);
-        } else if (data.type === 'booking_update') {
-          fetchSlots();
-        } else if (data.type === 'slots_count' && data.count !== upcomingSlots.length + bookedSlots.length) {
+        if (data.type === 'slot_update' && data.action === 'added') {
+          setPendingSlots((prev) => prev.filter((slot) => slot.id !== data.slot.id)); // Remove from pending
+          setUpcomingSlots((prev) => {
+            // Replace temp slot with server-confirmed slot
+            const updatedSlots = prev.filter((slot) => slot.id !== data.slot.id && !slot.id.startsWith('temp_'));
+            return [...updatedSlots, data.slot].sort((a, b) => new Date(a.date) - new Date(b.date) || a.start_time.localeCompare(b.start_time));
+          });
+        } else if (data.type === 'slot_update' && data.action === 'deleted') {
+          setUpcomingSlots((prev) => prev.filter((slot) => slot.id !== data.slot_id));
+          setPendingSlots((prev) => prev.filter((slot) => slot.id !== data.slot_id));
+        } else if (data.type === 'booking_update' || data.type === 'slots_count') {
           fetchSlots();
         } else if (data.type === 'error') {
           alert(data.message);
+          // Revert optimistic update if slot addition fails
+          if (data.message.includes('slot')) {
+            setPendingSlots([]);
+            setUpcomingSlots((prev) => prev.filter((slot) => !slot.id.startsWith('temp_')));
+          }
           fetchSlots();
         }
       } catch (error) {
@@ -64,6 +69,10 @@ const TeacherBooking = () => {
       }
     }
   }, [lastMessage]);
+
+  useEffect(() => {
+    console.log('upcomingSlots:', upcomingSlots, 'pendingSlots:', pendingSlots);
+  }, [upcomingSlots, pendingSlots]);
 
   useEffect(() => {
     fetchSlots();
@@ -78,7 +87,8 @@ const TeacherBooking = () => {
         limit: 100,
       });
       const sortedSlots = response.data.sort((a, b) => new Date(a.date) - new Date(b.date) || a.start_time.localeCompare(b.start_time));
-      setUpcomingSlots(sortedSlots.filter((slot) => !slot.is_booked));
+      // Preserve pending slots that haven't been confirmed
+      setUpcomingSlots([...pendingSlots, ...sortedSlots.filter((slot) => !slot.is_booked)]);
       setBookedSlots(sortedSlots.filter((slot) => slot.is_booked));
     } catch (error) {
       alert('Failed to fetch slots: ' + error.message);
@@ -114,9 +124,9 @@ const TeacherBooking = () => {
       setDate('');
       setStartTime('');
       setEndTime('');
+      setPendingSlots((prev) => [...prev, newSlot]);
       setUpcomingSlots((prev) => [...prev, newSlot].sort((a, b) => new Date(a.date) - new Date(b.date) || a.start_time.localeCompare(b.start_time)));
       sendMessage(JSON.stringify({ action: 'add_slot', ...newSlot }));
-      setTimeout(() => fetchSlots(), 1000);
       alert('Slot added successfully');
     }
   };
@@ -182,6 +192,7 @@ const TeacherBooking = () => {
         </motion.div>
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}>
           <h2 className="text-2xl font-bold text-white mb-4">Upcoming Slots <span className="text-sm text-white text-opacity-70">Total: {upcomingSlots.length}</span></h2>
+          {console.log('Rendering upcomingSlots:', upcomingSlots)}
           {upcomingSlots.length === 0 ? (
             <p className="text-white text-opacity-70">No upcoming slots.</p>
           ) : (
