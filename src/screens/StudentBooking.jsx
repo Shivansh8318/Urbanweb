@@ -7,6 +7,7 @@ import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
 import Modal from 'react-modal';
 import studentImage from '../assets/images/10.jpg';
+import 'react-big-calendar/lib/css/react-big-calendar.css';
 
 Modal.setAppElement('#root');
 
@@ -24,10 +25,10 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="text-white p-4 bg-red-500 bg-opacity-20 rounded">
-          <p>Something went wrong: {this.state.error.message}</p>
+        <div className="p-6 bg-red-500 bg-opacity-20 rounded-lg shadow-lg text-white">
+          <p className="text-lg">Something went wrong: {this.state.error.message}</p>
           <button
-            className="mt-2 bg-blue-500 text-white px-4 py-2 rounded"
+            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
             onClick={() => window.location.reload()}
           >
             Reload Page
@@ -49,7 +50,7 @@ const StudentBooking = () => {
   const [availableSlots, setAvailableSlots] = useState([]);
   const [bookedClasses, setBookedClasses] = useState([]);
   const [bookingSlotId, setBookingSlotId] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
   const [allSlots, setAllSlots] = useState([]);
   const [showMeeting, setShowMeeting] = useState(false);
 
@@ -62,56 +63,30 @@ const StudentBooking = () => {
     }, [navigate]);
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <p className="text-white">Redirecting to login...</p>
+        <p className="text-white text-lg">Redirecting to login...</p>
       </div>
     );
   }
 
-  console.log('StudentBooking initialized with user_id:', userData.user_id);
-  console.log('Full userData:', userData);
-
   const getWebSocketUrl = () => {
     const wsUrl = `/ws/booking/${userData.user_id}/`;
-    console.log('Generated WebSocket URL:', wsUrl);
     return wsUrl;
   };
 
   const { sendMessage, lastMessage, readyState } = useWebSocket(getWebSocketUrl(), {
-    onOpen: () => {
-      console.log('WebSocket Connected for StudentBooking:', getWebSocketUrl());
-      console.log('WebSocket ReadyState:', readyState);
-      console.log('User ID being used:', userData.user_id);
-    },
+    onOpen: () => console.log('WebSocket Connected for StudentBooking:', getWebSocketUrl()),
     onError: (error) => {
-      console.error('WebSocket Error in StudentBooking:', error);
-      console.error('WebSocket URL:', getWebSocketUrl());
-      console.error('WebSocket ReadyState:', readyState);
-      console.error('User Data:', userData);
+      console.error('WebSocket Error:', error);
       alert('WebSocket connection failed. Please check your network or try again later.');
     },
     onClose: (event) => {
-      console.error('WebSocket Disconnected in StudentBooking. Code:', event.code, 'Reason:', event.reason);
-      console.error('WebSocket URL:', getWebSocketUrl());
-      console.error('User ID:', userData.user_id);
-      if (event.code === 1000) {
-        console.warn('Normal closure (1000). Server may have closed the connection intentionally.');
-      } else if (event.code === 1006) {
-        console.error('Abnormal closure (1006). Possible causes: Backend rejected connection, invalid user_id, or network issue.');
-        alert('WebSocket connection closed unexpectedly. Please ensure your user ID is valid and try again.');
-      } else if (event.code === 1008) {
-        console.error('Policy violation (1008). Possible causes: Invalid user_id or unauthorized access.');
+      console.error('WebSocket Disconnected. Code:', event.code, 'Reason:', event.reason);
+      if (event.code === 1008) {
         alert('Access denied. Please log in again.');
         navigate('/auth/Student');
       }
     },
-    shouldReconnect: (closeEvent) => {
-      console.log('Attempting to reconnect WebSocket. Close event code:', closeEvent?.code);
-      if (closeEvent?.code === 1000 || closeEvent?.code === 1008) {
-        console.log('Not reconnecting due to close code:', closeEvent.code);
-        return false;
-      }
-      return true;
-    },
+    shouldReconnect: (closeEvent) => closeEvent?.code !== 1000 && closeEvent?.code !== 1008,
     reconnectAttempts: 3,
     reconnectInterval: 10000,
   });
@@ -125,9 +100,7 @@ const StudentBooking = () => {
     if (lastMessage?.data) {
       try {
         const data = JSON.parse(lastMessage.data);
-        console.log('WebSocket Message:', data);
         if (data.type === 'booking_update') {
-          console.log('Processing booking_update:', data);
           setAvailableSlots((prev) => prev.filter((slot) => slot.id !== data.booking.slot_id));
           setAllSlots((prev) => prev.filter((slot) => slot.id !== data.booking.slot_id));
           setBookingSlotId(null);
@@ -137,24 +110,32 @@ const StudentBooking = () => {
             if (selectedDate) fetchAvailableSlots(selectedTeacher.user_id, selectedDate);
           }
         } else if (data.type === 'slot_update' && selectedTeacher) {
-          console.log('Processing slot_update:', data);
           if (data.slot && !data.slot.is_booked && data.slot.teacher_id === selectedTeacher.user_id) {
             setAllSlots((prev) => {
               if (prev.some((slot) => slot.id === data.slot.id)) return prev;
-              return [...prev, {
-                ...data.slot,
-                start_time: data.slot.start_time.padEnd(8, ':00'),
-                end_time: data.slot.end_time.padEnd(8, ':00'),
-              }].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.start_time.localeCompare(b.start_time));
+              return [
+                ...prev,
+                {
+                  ...data.slot,
+                  start_time: data.slot.start_time.padEnd(8, ':00'),
+                  end_time: data.slot.end_time.padEnd(8, ':00'),
+                }
+              ].sort((a, b) => {
+                const dateDiff = new Date(a.date) - new Date(b.date);
+                return dateDiff !== 0 ? dateDiff : a.start_time.localeCompare(b.start_time);
+              });
             });
             if (selectedDate && data.slot.date === moment(selectedDate).format('YYYY-MM-DD')) {
               setAvailableSlots((prev) => {
                 if (prev.some((slot) => slot.id === data.slot.id)) return prev;
-                return [...prev, {
-                  ...data.slot,
-                  start_time: data.slot.start_time.padEnd(8, ':00'),
-                  end_time: data.slot.end_time.padEnd(8, ':00'),
-                }].sort((a, b) => a.start_time.localeCompare(b.start_time));
+                return [
+                  ...prev,
+                  {
+                    ...data.slot,
+                    start_time: data.slot.start_time.padEnd(8, ':00'),
+                    end_time: data.slot.end_time.padEnd(8, ':00'),
+                  }
+                ].sort((a, b) => a.start_time.localeCompare(b.start_time));
               });
             }
           } else if (data.action === 'deleted') {
@@ -162,14 +143,11 @@ const StudentBooking = () => {
             setAvailableSlots((prev) => prev.filter((slot) => slot.id !== data.slot_id));
           }
         } else if (data.type === 'error') {
-          console.error('WebSocket Error Message:', data);
           setBookingSlotId(null);
           alert(data.message || 'An error occurred with the WebSocket connection.');
-        } else {
-          console.warn('Unknown WebSocket message type:', data.type);
         }
       } catch (error) {
-        console.error('WebSocket message parsing error:', error, 'Raw message:', lastMessage.data);
+        console.error('WebSocket message parsing error:', error);
         alert('Error processing WebSocket message. Please try again.');
       }
     }
@@ -177,14 +155,12 @@ const StudentBooking = () => {
 
   useEffect(() => {
     if (selectedTeacher) {
-      console.log('Selected teacher changed, fetching slots for:', selectedTeacher.user_id);
       fetchAllSlots(selectedTeacher.user_id);
     }
   }, [selectedTeacher]);
 
   useEffect(() => {
     if (selectedTeacher && selectedDate) {
-      console.log('Selected date changed, fetching available slots for:', selectedTeacher.user_id, selectedDate);
       fetchAvailableSlots(selectedTeacher.user_id, selectedDate);
     }
   }, [selectedTeacher, selectedDate]);
@@ -192,23 +168,15 @@ const StudentBooking = () => {
   const fetchTeachers = async () => {
     setIsLoadingTeachers(true);
     try {
-      console.log('Fetching teachers from /api/teacher/list-teachers/');
       const response = await axios.get('/api/teacher/list-teachers/');
-      console.log('Raw API response:', response);
       if (!Array.isArray(response.data)) {
-        throw new Error(`Invalid response format: Expected an array, got ${JSON.stringify(response.data)}`);
+        throw new Error('Invalid response format: Expected an array');
       }
-      console.log('Teachers fetched:', response.data);
       setTeachers(response.data);
     } catch (error) {
       console.error('Error fetching teachers:', error);
-      console.error('Error response:', error.response?.data);
       setTeachers([]);
-      if (error.message === 'Received HTML response instead of JSON') {
-        alert('Server returned an invalid response. Please check if the API server is running correctly.');
-      } else {
-        alert(`Failed to fetch teachers: ${error.response?.data?.message || error.message}`);
-      }
+      alert(`Failed to fetch teachers: ${error.response?.data?.message || error.message}`);
     } finally {
       setIsLoadingTeachers(false);
     }
@@ -216,7 +184,6 @@ const StudentBooking = () => {
 
   const fetchAllSlots = async (teacherId) => {
     try {
-      console.log('Fetching all slots for teacher:', teacherId);
       const response = await axios.post('/api/booking/get-teacher-slots/', {
         teacher_id: teacherId,
         limit: 500,
@@ -229,8 +196,10 @@ const StudentBooking = () => {
           start_time: slot.start_time.padEnd(8, ':00'),
           end_time: slot.end_time.padEnd(8, ':00'),
         }))
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime() || a.start_time.localeCompare(b.start_time));
-      console.log('All slots fetched and filtered:', sortedSlots);
+        .sort((a, b) => {
+          const dateDiff = new Date(a.date) - new Date(b.date);
+          return dateDiff !== 0 ? dateDiff : a.start_time.localeCompare(b.start_time);
+        });
       setAllSlots(sortedSlots);
     } catch (error) {
       console.error('Error fetching all slots:', error);
@@ -241,7 +210,6 @@ const StudentBooking = () => {
 
   const fetchAvailableSlots = async (teacherId, date) => {
     try {
-      console.log('Fetching available slots for teacher:', teacherId, 'date:', date);
       const dateStr = moment(date).format('YYYY-MM-DD');
       const response = await axios.post('/api/booking/get-teacher-slots/', {
         teacher_id: teacherId,
@@ -256,7 +224,6 @@ const StudentBooking = () => {
           end_time: slot.end_time.padEnd(8, ':00'),
         }))
         .sort((a, b) => a.start_time.localeCompare(b.start_time));
-      console.log('Available slots fetched:', available);
       setAvailableSlots(available);
     } catch (error) {
       console.error('Error fetching available slots:', error);
@@ -267,11 +234,9 @@ const StudentBooking = () => {
 
   const fetchBookedClasses = async () => {
     try {
-      console.log('Fetching booked classes for student:', userData.user_id);
       const response = await axios.post('/api/booking/get-student-bookings/', {
         student_id: userData.user_id,
       });
-      console.log('Booked classes fetched:', response.data);
       setBookedClasses(response.data);
     } catch (error) {
       console.error('Error fetching booked classes:', error);
@@ -285,18 +250,14 @@ const StudentBooking = () => {
       return;
     }
     if (window.confirm(`Book slot on ${slot.date} from ${slot.start_time} to ${slot.end_time}?`)) {
-      console.log('Booking slot:', slot.id, 'for student:', userData.user_id);
       setBookingSlotId(slot.id);
-      const message = {
+      sendMessage(JSON.stringify({
         action: 'book_slot',
         slot_id: slot.id,
         student_id: userData.user_id,
-      };
-      console.log('Sending WebSocket message:', message);
-      sendMessage(JSON.stringify(message));
+      }));
       setTimeout(() => {
         if (bookingSlotId === slot.id) {
-          console.log('Booking timeout reached, refreshing data');
           setBookingSlotId(null);
           fetchBookedClasses();
           if (selectedTeacher) {
@@ -359,131 +320,185 @@ const StudentBooking = () => {
     id: slot.id,
   }));
 
-  const getReadyStateText = (state) => {
-    switch (state) {
-      case 0: return 'CONNECTING';
-      case 1: return 'OPEN';
-      case 2: return 'CLOSING';
-      case 3: return 'CLOSED';
-      default: return 'UNKNOWN';
-    }
+  const CustomToolbar = ({ date, onNavigate }) => {
+    return (
+      <div className="flex justify-between items-center mb-4 p-4 bg-gray-800 rounded-lg">
+        <button
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
+          onClick={() => onNavigate('PREV')}
+        >
+          Previous
+        </button>
+        <span className="text-white text-lg font-semibold">{moment(date).format('MMMM YYYY')}</span>
+        <button
+          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
+          onClick={() => onNavigate('NEXT')}
+        >
+          Next
+        </button>
+      </div>
+    );
   };
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-900 relative">
-        <img src={studentImage} alt="Background" className="absolute inset-0 w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-black bg-opacity-55"></div>
-        <div className="relative max-w-4xl mx-auto p-6">
+      <div className="min-h-screen bg-gray-900 relative overflow-hidden">
+        <style>
+          {`
+            .rbc-calendar {
+              background-color: #1F2937;
+            }
+            .rbc-date-cell {
+              color: #FFFFFF !important;
+            }
+            .rbc-date-cell.rbc-off-range {
+              color: #9CA3AF !important;
+            }
+            .rbc-date-cell.rbc-now {
+              color: #FFFFFF !important;
+              background-color: #4B5563;
+            }
+            .rbc-event {
+              background-color: #4F46E5 !important;
+              color: #FFFFFF !important;
+            }
+            .rbc-event.rbc-selected {
+              background-color: #7C3AED !important;
+            }
+            .rbc-day-bg {
+              background-color: #1F2937;
+            }
+            .rbc-day-bg.rbc-off-range-bg {
+              background-color: #374151;
+            }
+            .rbc-header {
+              background-color: #1F2937;
+              color: #FFFFFF;
+              border-bottom: 1px solid #4B5563 !important;
+            }
+            .rbc-time-view {
+              background-color: #1F2937;
+            }
+            .rbc-time-header {
+              background-color: #1F2937;
+              color: #FFFFFF;
+            }
+            .rbc-time-content {
+              background-color: #1F2937;
+              color: #FFFFFF;
+            }
+            .rbc-time-slot {
+              color: #D1D5DB;
+            }
+            .rbc-today {
+              background-color: #4B5563;
+            }
+          `}
+        </style>
+        <img src={studentImage} alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+        <div className="relative max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
           <motion.h1
-            className="text-4xl font-bold text-white text-center mb-6"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
+            className="text-3xl sm:text-4xl font-bold text-white text-center mb-8"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5 }}
           >
-            Book Classes
+            Book Your Classes
           </motion.h1>
 
-          <div className="mb-4 p-2 bg-white bg-opacity-10 rounded text-white text-sm">
-            <p>WebSocket Status: <span className={readyState === 1 ? 'text-green-400' : 'text-red-400'}>{getReadyStateText(readyState)}</span></p>
-            <p>User ID: {userData?.user_id}</p>
-            <p>WebSocket URL: {getWebSocketUrl()}</p>
-            <p>Last Message: {lastMessage ? 'Received' : 'None'}</p>
-            {readyState === 3 && (
-              <div className="text-red-400">
-                <p>Connection failed - Check if user exists in backend and endpoint is correct</p>
-                <p>Compare with TeacherBooking WebSocket URL format</p>
-              </div>
-            )}
-            <button
-              className="mt-2 bg-blue-500 text-white px-2 py-1 rounded text-xs"
-              onClick={() => {
-                console.log('Manual connection test - Current userData:', userData);
-                console.log('Manual connection test - WebSocket URL:', getWebSocketUrl());
-                console.log('Manual connection test - ReadyState:', readyState);
-              }}
-            >
-              Log Debug Info
-            </button>
-          </div>
-
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.2 }}>
-            <h2 className="text-2xl font-bold text-white mb-4">Select Teacher</h2>
+          {/* Teachers Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mb-8"
+          >
+            <h2 className="text-2xl font-semibold text-white mb-4">Select a Teacher</h2>
             {isLoadingTeachers ? (
               <p className="text-white">Loading teachers...</p>
             ) : teachers.length === 0 ? (
-              <p className="text-white text-opacity-70">No teachers available.</p>
+              <p className="text-white opacity-70">No teachers available.</p>
             ) : (
-              <div className="flex flex-wrap gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {teachers.map((teacher) => (
                   <div
                     key={teacher.user_id}
-                    className={`p-4 rounded-lg cursor-pointer ${
+                    className={`p-4 rounded-lg cursor-pointer transition-all duration-300 ${
                       selectedTeacher?.user_id === teacher.user_id
-                        ? 'bg-indigo-600 bg-opacity-20 border-2 border-indigo-600'
-                        : 'bg-white bg-opacity-10 border border-white border-opacity-20'
-                    }`}
+                        ? 'bg-indigo-600 bg-opacity-30 border-2 border-indigo-500'
+                        : 'bg-gray-800 bg-opacity-50 border border-gray-600'
+                    } hover:bg-indigo-600 hover:bg-opacity-20`}
                     onClick={() => {
-                      console.log('Teacher selected:', teacher);
                       setSelectedTeacher(teacher);
-                      setSelectedDate(null);
+                      setSelectedDate(new Date());
                       setAvailableSlots([]);
                     }}
                   >
-                    <p className="text-white font-bold">{teacher.name}</p>
-                    <p className="text-white text-opacity-60 text-sm">{teacher.subject}</p>
+                    <p className="text-white font-semibold">{teacher.name}</p>
+                    <p className="text-white opacity-60 text-sm">{teacher.subject}</p>
                   </div>
                 ))}
               </div>
             )}
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.3 }}>
-            <h2 className="text-2xl font-bold text-white mb-4">Available Slots</h2>
+          {/* Calendar Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="mb-8"
+          >
+            <h2 className="text-2xl font-semibold text-white mb-4">Available Slots</h2>
             <Calendar
               localizer={localizer}
-              date={selectedDate || undefined}
+              date={selectedDate}
               events={events}
               startAccessor="start"
               endAccessor="end"
               style={{ height: 500 }}
-              className="bg-white bg-opacity-10 rounded-lg p-4 border border-white border-opacity-20"
+              className="bg-gray-800 rounded-lg p-4 border border-gray-600"
               onSelectEvent={(event) => {
                 const slot = allSlots.find((s) => s.id === event.id);
                 if (slot) handleBookSlot(slot);
               }}
-              onSelectSlot={({ start }) => {
-                console.log('Date selected on calendar:', start);
-                setSelectedDate(start);
-              }}
+              onSelectSlot={({ start }) => setSelectedDate(start)}
+              onNavigate={(newDate) => setSelectedDate(newDate)}
               selectable
               min={new Date()}
+              components={{ toolbar: CustomToolbar }}
             />
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.4 }}>
-            <h2 className="text-2xl font-bold text-white mb-4">Available Slots ({availableSlots.length})</h2>
+          {/* Available Slots Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.4 }}
+            className="mb-8"
+          >
+            <h2 className="text-2xl font-semibold text-white mb-4">Available Slots ({availableSlots.length})</h2>
             {!selectedTeacher ? (
-              <p className="text-white text-opacity-70">Please select a teacher to view available slots.</p>
+              <p className="text-white opacity-70">Please select a teacher to view available slots.</p>
             ) : !selectedDate ? (
-              <p className="text-white text-opacity-70">Please select a date to view available slots.</p>
+              <p className="text-white opacity-70">Please select a date to view available slots.</p>
             ) : availableSlots.length === 0 ? (
               <div>
-                <p className="text-white text-opacity-70">No available slots for this date.</p>
-                <p className="text-white text-opacity-50 text-sm">Try selecting another date on the calendar.</p>
+                <p className="text-white opacity-70">No available slots for this date.</p>
+                <p className="text-white opacity-50 text-sm">Try selecting another date on the calendar.</p>
               </div>
             ) : (
               <div className="space-y-4 max-h-64 overflow-y-auto">
                 {availableSlots.map((slot) => (
                   <div
                     key={slot.id}
-                    className="flex justify-between items-center p-4 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20"
+                    className="flex justify-between items-center p-4 bg-gray-800 rounded-lg border border-gray-600"
                   >
                     <p className="text-white">
                       {slot.date} {slot.start_time} - {slot.end_time}
                     </p>
                     <button
-                      className={`bg-indigo-600 text-white px-4 py-2 rounded-full ${
+                      className={`bg-indigo-600 text-white px-4 py-2 rounded-lg transition ${
                         bookingSlotId === slot.id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-indigo-700'
                       }`}
                       onClick={() => handleBookSlot(slot)}
@@ -497,16 +512,21 @@ const StudentBooking = () => {
             )}
           </motion.div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.5 }}>
-            <h2 className="text-2xl font-bold text-white mb-4">Booked Classes</h2>
+          {/* Booked Classes Section */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.5 }}
+          >
+            <h2 className="text-2xl font-semibold text-white mb-4">Booked Classes</h2>
             {bookedClasses.length === 0 ? (
-              <p className="text-white text-opacity-70">No booked classes.</p>
+              <p className="text-white opacity-70">No booked classes.</p>
             ) : (
               <div className="space-y-4 max-h-64 overflow-y-auto">
                 {bookedClasses.map((booking) => (
                   <div
                     key={booking.id}
-                    className="flex justify-between items-center p-4 bg-white bg-opacity-10 rounded-lg border border-white border-opacity-20"
+                    className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-4 bg-gray-800 rounded-lg border border-gray-600"
                   >
                     <div>
                       <p className="text-white font-semibold">Teacher: {booking.teacher_name}</p>
@@ -526,17 +546,17 @@ const StudentBooking = () => {
                       </p>
                       {booking.payment_status && <p className="text-green-400 text-sm">Payment: Completed</p>}
                     </div>
-                    <div className="flex space-x-2">
+                    <div className="flex space-x-2 mt-2 sm:mt-0">
                       {!booking.payment_status && (
                         <button
-                          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
+                          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
                           onClick={() => handlePayment(booking)}
                         >
                           Pay Now
                         </button>
                       )}
                       <button
-                        className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600"
+                        className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition"
                         onClick={() => setShowMeeting(true)}
                       >
                         Start Class
@@ -548,6 +568,7 @@ const StudentBooking = () => {
             )}
           </motion.div>
 
+          {/* Meeting Modal */}
           <Modal
             isOpen={showMeeting}
             onRequestClose={() => setShowMeeting(false)}
@@ -563,12 +584,13 @@ const StudentBooking = () => {
                 maxWidth: '800px',
                 padding: '20px',
                 borderRadius: '8px',
+                background: '#1F2937',
               },
             }}
           >
             <iframe src={meetingURL} className="w-full h-[70vh]" allow="camera; microphone" title="Video Meeting" />
             <button
-              className="mt-4 bg-red-500 text-white px-4 py-2 rounded-full w-full"
+              className="mt-4 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition w-full"
               onClick={() => setShowMeeting(false)}
             >
               Close

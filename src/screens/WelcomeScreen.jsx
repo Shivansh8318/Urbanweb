@@ -273,21 +273,21 @@ const WelcomeScreen = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 sm:gap-10">
             {[
               {
-                name: 'Sarah Johnson',
+                name: 'Shivansh Agrawal',
                 role: 'Medical Student',
                 quote: 'UrbanBook has revolutionized my study routine. The scheduling system is incredibly intuitive, and the video classes are crystal clear!',
                 avatar: image1,
                 rating: 5
               },
               {
-                name: 'Prof. Thompson',
+                name: 'Utkarsh Singh',
                 role: 'Physics Teacher',
                 quote: 'As an educator, I love how UrbanBook streamlines everything. The interactive tools make teaching online as effective as in-person classes.',
                 avatar: image2,
                 rating: 5
               },
               {
-                name: 'Emily Rodriguez',
+                name: 'Jagriti Sharma',
                 role: 'Parent',
                 quote: 'Monitoring my daughter\'s progress has never been easier. The detailed reports help me stay involved in her education journey.',
                 avatar: image3,
