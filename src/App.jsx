@@ -1,29 +1,31 @@
+// src/App.jsx
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+
 import WelcomeScreen from './screens/WelcomeScreen';
 import RoleSelectionScreen from './screens/RoleSelectionScreen';
-import AuthScreen from './screens/AuthScreen';
 import CompleteProfileScreen from './screens/CompleteProfileScreen';
-import StudentDashboard from './screens/StudentDashboard';
-import TeacherDashboard from './screens/TeacherDashboard';
-import StudentBooking from './screens/StudentBooking';
-import TeacherBooking from './screens/TeacherBooking';
+import AuthScreen from './features/auth/screens/AuthScreen';
+import StudentDashboard from './features/student/screens/StudentDashboard';
+import StudentBooking from './features/student/screens/StudentBooking';
+import TeacherDashboard from './features/teacher/screens/TeacherDashboard';
+import TeacherBooking from './features/teacher/screens/TeacherBooking';
 
-function App() {
+const App = () => {
   return (
-    <BrowserRouter>
+    <Router>
       <Routes>
         <Route path="/" element={<WelcomeScreen />} />
         <Route path="/role-selection" element={<RoleSelectionScreen />} />
         <Route path="/auth/:role" element={<AuthScreen />} />
         <Route path="/complete-profile" element={<CompleteProfileScreen />} />
         <Route path="/student/dashboard" element={<StudentDashboard />} />
-        <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
         <Route path="/student/booking" element={<StudentBooking />} />
+        <Route path="/teacher/dashboard" element={<TeacherDashboard />} />
         <Route path="/teacher/booking" element={<TeacherBooking />} />
       </Routes>
-    </BrowserRouter>
+    </Router>
   );
-}
+};
 
 export default App;

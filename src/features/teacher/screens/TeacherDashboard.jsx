@@ -1,8 +1,10 @@
+// src/features/teacher/screens/TeacherDashboard.jsx
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { motion } from 'framer-motion';
-import teacherImage from '../assets/images/9.jpg';
+import teacherImage from '../../../assets/images/9.jpg';
+import { fetchProfile } from '../services/teacherService';
+import Sidebar from '../components/Sidebar'; // Can reuse from student
 
 const TeacherDashboard = () => {
   const { state } = useLocation();
@@ -11,21 +13,10 @@ const TeacherDashboard = () => {
   const [profileData, setProfileData] = useState(null);
 
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const response = await axios.post('/api/teacher/get-profile/', { user_id: userData.user_id });
-        setProfileData(response.data);
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-      }
-    };
-    fetchProfile();
+    fetchProfile(userData.user_id)
+      .then((data) => setProfileData(data))
+      .catch((error) => console.error('Error fetching profile:', error));
   }, [userData]);
-
-  const handleLogout = () => {
-    sessionStorage.clear();
-    navigate('/');
-  };
 
   const sidebarItems = [
     { label: 'Dashboard', path: '/teacher/dashboard', icon: '🏠' },
@@ -36,7 +27,6 @@ const TeacherDashboard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black relative overflow-hidden">
-      {/* Background Image with Gradient Overlay */}
       <motion.div
         className="absolute inset-0"
         initial={{ opacity: 0, scale: 1.2 }}
@@ -51,64 +41,13 @@ const TeacherDashboard = () => {
         <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70" />
       </motion.div>
 
-      {/* Subtle Background Particle Effect */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="w-full h-full bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.1)_0%,_transparent_70%)] animate-pulse" />
+        <div className="w-full h-full bg-[radial-gradient(circle_at_center,_rgba(59, personally predicted: 130,246,0.1)_0%,_transparent_70%)] animate-pulse" />
       </div>
 
-      {/* Layout with Sidebar */}
       <div className="flex min-h-screen">
-        {/* Sidebar */}
-        <motion.div
-          className="w-64 bg-black/40 backdrop-blur-xl border-r border-white/10 flex flex-col justify-between p-6 fixed h-full z-10"
-          initial={{ x: -100, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
-        >
-          <div>
-            <h2 className="text-2xl font-extrabold text-white mb-8 tracking-tight">
-              UrbanBook
-            </h2>
-            <nav className="space-y-2">
-              {sidebarItems.map((item, index) => (
-                <motion.div
-                  key={item.label}
-                  className="flex items-center p-3 rounded-lg cursor-pointer group"
-                  initial={{ opacity: 0, x: -20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.5, delay: 0.1 + index * 0.1 }}
-                  whileHover={{ scale: 1.05, backgroundColor: 'rgba(59, 130, 246, 0.2)' }}
-                  onClick={() => navigate(item.path, { state: { userData } })}
-                >
-                  <span className="text-blue-400 mr-3 text-xl">{item.icon}</span>
-                  <span className="text-gray-300 group-hover:text-blue-300 transition-colors duration-300">
-                    {item.label}
-                  </span>
-                </motion.div>
-              ))}
-            </nav>
-          </div>
-          <motion.button
-            className="relative w-full px-4 py-3 bg-gradient-to-r from-red-500 to-red-700 text-white rounded-full text-base font-semibold transform hover:scale-105 transition-all duration-300 overflow-hidden group"
-            onClick={handleLogout}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: 0.5 }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <span className="absolute inset-0 bg-gradient-to-r from-red-600 to-red-800 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-            <span className="relative z-10">Logout</span>
-            <motion.span
-              className="absolute inset-0 border-2 border-red-400 rounded-full"
-              initial={{ scale: 0, opacity: 0 }}
-              animate={{ scale: 1.5, opacity: 0 }}
-              transition={{ repeat: Infinity, duration: 2, ease: 'easeOut' }}
-            />
-          </motion.button>
-        </motion.div>
+        <Sidebar userData={userData} role="Teacher" sidebarItems={sidebarItems} />
 
-        {/* Main Content */}
         <div className="flex-1 ml-64 p-6 sm:p-8 flex flex-col items-center min-h-screen justify-center">
           <motion.div
             initial={{ opacity: 0, y: -30 }}
@@ -123,7 +62,6 @@ const TeacherDashboard = () => {
             </p>
           </motion.div>
 
-          {/* Profile Card */}
           {profileData && (
             <motion.div
               className="relative bg-black/40 backdrop-blur-xl rounded-2xl p-6 sm:p-8 border border-white/10 hover:border-blue-500/50 transition-all duration-500 shadow-lg hover:shadow-xl hover:shadow-blue-500/20 w-full max-w-2xl group mb-8"

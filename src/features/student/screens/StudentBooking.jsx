@@ -1,44 +1,22 @@
+// src/features/student/screens/StudentBooking.jsx
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import axios from '../utils/axios';
-import { motion } from 'framer-motion';
-import useWebSocket from 'react-use-websocket';
-import { Calendar, momentLocalizer } from 'react-big-calendar';
 import moment from 'moment';
+import { Calendar, momentLocalizer } from 'react-big-calendar';
 import Modal from 'react-modal';
-import studentImage from '../assets/images/10.jpg';
-import 'react-big-calendar/lib/css/react-big-calendar.css';
+import { motion } from 'framer-motion';
+import studentImage from '../../../assets/images/10.jpg';
+import { fetchAllSlots, fetchAvailableSlots, fetchBookedClasses, createPaymentOrder, verifyPayment } from '../services/bookingService';
+import { fetchTeachers } from '../services/studentService';
+import useBookingWebSocket from '../../shared/websocket/useBookingWebSocket';
+import ErrorBoundary from '../../shared/components/ErrorBoundary';
+import CustomToolbar from '../components/CustomToolbar';
+import '../styles/calendar.css';
 
 Modal.setAppElement('#root');
 
 const localizer = momentLocalizer(moment);
 const meetingURL = 'https://shivansh-videoconf-309.app.100ms.live/meeting/uvr-mzvu-vgd';
-
-// Error Boundary Component
-class ErrorBoundary extends React.Component {
-  state = { hasError: false, error: null };
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error };
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return (
-        <div className="p-6 bg-red-500 bg-opacity-20 rounded-lg shadow-lg text-white">
-          <p className="text-lg">Something went wrong: {this.state.error.message}</p>
-          <button
-            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-            onClick={() => window.location.reload()}
-          >
-            Reload Page
-          </button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
-}
 
 const StudentBooking = () => {
   const { state } = useLocation();
@@ -54,7 +32,6 @@ const StudentBooking = () => {
   const [allSlots, setAllSlots] = useState([]);
   const [showMeeting, setShowMeeting] = useState(false);
 
-  // Validate userData
   if (!userData?.user_id) {
     console.error('userData is missing or invalid:', userData);
     useEffect(() => {
@@ -68,33 +45,24 @@ const StudentBooking = () => {
     );
   }
 
-  const getWebSocketUrl = () => {
-    const wsUrl = `/ws/booking/${userData.user_id}/`;
-    return wsUrl;
-  };
-
-  const { sendMessage, lastMessage, readyState } = useWebSocket(getWebSocketUrl(), {
-    onOpen: () => console.log('WebSocket Connected for StudentBooking:', getWebSocketUrl()),
-    onError: (error) => {
-      console.error('WebSocket Error:', error);
-      alert('WebSocket connection failed. Please check your network or try again later.');
-    },
-    onClose: (event) => {
-      console.error('WebSocket Disconnected. Code:', event.code, 'Reason:', event.reason);
-      if (event.code === 1008) {
-        alert('Access denied. Please log in again.');
-        navigate('/auth/Student');
-      }
-    },
-    shouldReconnect: (closeEvent) => closeEvent?.code !== 1000 && closeEvent?.code !== 1008,
-    reconnectAttempts: 3,
-    reconnectInterval: 10000,
-  });
+  const { sendMessage, lastMessage, readyState } = useBookingWebSocket(userData.user_id, 'Student');
 
   useEffect(() => {
-    fetchTeachers();
-    fetchBookedClasses();
-  }, []);
+    fetchTeachers()
+      .then((data) => setTeachers(data))
+      .catch((error) => {
+        console.error('Error fetching teachers:', error);
+        setTeachers([]);
+        alert(`Failed to fetch teachers: ${error.message}`);
+      })
+      .finally(() => setIsLoadingTeachers(false));
+    fetchBookedClasses(userData.user_id)
+      .then((data) => setBookedClasses(data))
+      .catch((error) => {
+        console.error('Error fetching booked classes:', error);
+        alert('Failed to fetch booked classes: ' + error.message);
+      });
+  }, [userData.user_id]);
 
   useEffect(() => {
     if (lastMessage?.data) {
@@ -104,10 +72,13 @@ const StudentBooking = () => {
           setAvailableSlots((prev) => prev.filter((slot) => slot.id !== data.booking.slot_id));
           setAllSlots((prev) => prev.filter((slot) => slot.id !== data.booking.slot_id));
           setBookingSlotId(null);
-          fetchBookedClasses();
+          fetchBookedClasses(userData.user_id)
+            .then((data) => setBookedClasses(data));
           if (selectedTeacher) {
-            fetchAllSlots(selectedTeacher.user_id);
-            if (selectedDate) fetchAvailableSlots(selectedTeacher.user_id, selectedDate);
+            fetchAllSlots(selectedTeacher.user_id)
+              .then((data) => setAllSlots(data));
+            if (selectedDate) fetchAvailableSlots(selectedTeacher.user_id, moment(selectedDate))
+              .then((data) => setAvailableSlots(data));
           }
         } else if (data.type === 'slot_update' && selectedTeacher) {
           if (data.slot && !data.slot.is_booked && data.slot.teacher_id === selectedTeacher.user_id) {
@@ -151,98 +122,31 @@ const StudentBooking = () => {
         alert('Error processing WebSocket message. Please try again.');
       }
     }
-  }, [lastMessage, selectedTeacher, selectedDate]);
+  }, [lastMessage, selectedTeacher, selectedDate, userData.user_id]);
 
   useEffect(() => {
     if (selectedTeacher) {
-      fetchAllSlots(selectedTeacher.user_id);
+      fetchAllSlots(selectedTeacher.user_id)
+        .then((data) => setAllSlots(data))
+        .catch((error) => {
+          console.error('Error fetching all slots:', error);
+          setAllSlots([]);
+          alert('Failed to fetch slots: ' + error.message);
+        });
     }
   }, [selectedTeacher]);
 
   useEffect(() => {
     if (selectedTeacher && selectedDate) {
-      fetchAvailableSlots(selectedTeacher.user_id, selectedDate);
+      fetchAvailableSlots(selectedTeacher.user_id, moment(selectedDate))
+        .then((data) => setAvailableSlots(data))
+        .catch((error) => {
+          console.error('Error fetching available slots:', error);
+          setAvailableSlots([]);
+          alert('Failed to fetch available slots: ' + error.message);
+        });
     }
   }, [selectedTeacher, selectedDate]);
-
-  const fetchTeachers = async () => {
-    setIsLoadingTeachers(true);
-    try {
-      const response = await axios.get('/api/teacher/list-teachers/');
-      if (!Array.isArray(response.data)) {
-        throw new Error('Invalid response format: Expected an array');
-      }
-      setTeachers(response.data);
-    } catch (error) {
-      console.error('Error fetching teachers:', error);
-      setTeachers([]);
-      alert(`Failed to fetch teachers: ${error.response?.data?.message || error.message}`);
-    } finally {
-      setIsLoadingTeachers(false);
-    }
-  };
-
-  const fetchAllSlots = async (teacherId) => {
-    try {
-      const response = await axios.post('/api/booking/get-teacher-slots/', {
-        teacher_id: teacherId,
-        limit: 500,
-        include_all: true,
-      });
-      const sortedSlots = response.data
-        .filter((slot) => !slot.is_booked && new Date(slot.date) >= new Date().setHours(0, 0, 0, 0))
-        .map((slot) => ({
-          ...slot,
-          start_time: slot.start_time.padEnd(8, ':00'),
-          end_time: slot.end_time.padEnd(8, ':00'),
-        }))
-        .sort((a, b) => {
-          const dateDiff = new Date(a.date) - new Date(b.date);
-          return dateDiff !== 0 ? dateDiff : a.start_time.localeCompare(b.start_time);
-        });
-      setAllSlots(sortedSlots);
-    } catch (error) {
-      console.error('Error fetching all slots:', error);
-      setAllSlots([]);
-      alert('Failed to fetch slots: ' + (error.response?.data?.message || error.message));
-    }
-  };
-
-  const fetchAvailableSlots = async (teacherId, date) => {
-    try {
-      const dateStr = moment(date).format('YYYY-MM-DD');
-      const response = await axios.post('/api/booking/get-teacher-slots/', {
-        teacher_id: teacherId,
-        date: dateStr,
-        limit: 500,
-      });
-      const available = response.data
-        .filter((slot) => !slot.is_booked)
-        .map((slot) => ({
-          ...slot,
-          start_time: slot.start_time.padEnd(8, ':00'),
-          end_time: slot.end_time.padEnd(8, ':00'),
-        }))
-        .sort((a, b) => a.start_time.localeCompare(b.start_time));
-      setAvailableSlots(available);
-    } catch (error) {
-      console.error('Error fetching available slots:', error);
-      setAvailableSlots([]);
-      alert('Failed to fetch available slots: ' + (error.response?.data?.message || error.message));
-    }
-  };
-
-  const fetchBookedClasses = async () => {
-    try {
-      const response = await axios.post('/api/booking/get-student-bookings/', {
-        student_id: userData.user_id,
-      });
-      setBookedClasses(response.data);
-    } catch (error) {
-      console.error('Error fetching booked classes:', error);
-      alert('Failed to fetch booked classes: ' + (error.response?.data?.message || error.message));
-    }
-  };
 
   const handleBookSlot = (slot) => {
     if (bookingSlotId) {
@@ -259,10 +163,13 @@ const StudentBooking = () => {
       setTimeout(() => {
         if (bookingSlotId === slot.id) {
           setBookingSlotId(null);
-          fetchBookedClasses();
+          fetchBookedClasses(userData.user_id)
+            .then((data) => setBookedClasses(data));
           if (selectedTeacher) {
-            fetchAllSlots(selectedTeacher.user_id);
-            if (selectedDate) fetchAvailableSlots(selectedTeacher.user_id, selectedDate);
+            fetchAllSlots(selectedTeacher.user_id)
+              .then((data) => setAllSlots(data));
+            if (selectedDate) fetchAvailableSlots(selectedTeacher.user_id, moment(selectedDate))
+              .then((data) => setAvailableSlots(data));
           }
         }
       }, 10000);
@@ -271,33 +178,30 @@ const StudentBooking = () => {
 
   const handlePayment = async (booking) => {
     try {
-      const response = await axios.post('/api/payment/create-order/', {
-        booking_id: booking.id,
-        amount: 500,
-        currency: 'INR',
-      });
+      const orderData = await createPaymentOrder(booking.id);
       const options = {
-        key: response.data.key,
-        amount: response.data.amount,
-        currency: response.data.currency,
+        key: orderData.key,
+        amount: orderData.amount,
+        currency: orderData.currency,
         name: 'UrbanBook',
         description: 'Payment for class booking',
-        order_id: response.data.order_id,
+        order_id: orderData.order_id,
         handler: async (response) => {
           try {
-            const verifyResponse = await axios.post('/api/payment/verify-payment/', {
+            const verifyResponse = await verifyPayment({
               order_id: response.razorpay_order_id,
               payment_id: response.razorpay_payment_id,
               signature: response.razorpay_signature,
             });
-            if (verifyResponse.data.success) {
+            if (verifyResponse.success) {
               alert('Payment completed successfully!');
-              fetchBookedClasses();
+              fetchBookedClasses(userData.user_id)
+                .then((data) => setBookedClasses(data));
             } else {
-              alert('Payment verification failed: ' + verifyResponse.data.message);
+              alert('Payment verification failed: ' + verifyResponse.message);
             }
           } catch (error) {
-            alert('Failed to verify payment: ' + (error.response?.data?.message || error.message));
+            alert('Failed to verify payment: ' + (error.message));
           }
         },
         prefill: {
@@ -309,7 +213,7 @@ const StudentBooking = () => {
       const rzp = new window.Razorpay(options);
       rzp.open();
     } catch (error) {
-      alert('Failed to initiate payment: ' + (error.response?.data?.message || error.message));
+      alert('Failed to initiate payment: ' + (error.message));
     }
   };
 
@@ -320,81 +224,9 @@ const StudentBooking = () => {
     id: slot.id,
   }));
 
-  const CustomToolbar = ({ date, onNavigate }) => {
-    return (
-      <div className="flex justify-between items-center mb-4 p-4 bg-gray-800 rounded-lg">
-        <button
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
-          onClick={() => onNavigate('PREV')}
-        >
-          Previous
-        </button>
-        <span className="text-white text-lg font-semibold">{moment(date).format('MMMM YYYY')}</span>
-        <button
-          className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
-          onClick={() => onNavigate('NEXT')}
-        >
-          Next
-        </button>
-      </div>
-    );
-  };
-
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gray-900 relative overflow-hidden">
-        <style>
-          {`
-            .rbc-calendar {
-              background-color: #1F2937;
-            }
-            .rbc-date-cell {
-              color: #FFFFFF !important;
-            }
-            .rbc-date-cell.rbc-off-range {
-              color: #9CA3AF !important;
-            }
-            .rbc-date-cell.rbc-now {
-              color: #FFFFFF !important;
-              background-color: #4B5563;
-            }
-            .rbc-event {
-              background-color: #4F46E5 !important;
-              color: #FFFFFF !important;
-            }
-            .rbc-event.rbc-selected {
-              background-color: #7C3AED !important;
-            }
-            .rbc-day-bg {
-              background-color: #1F2937;
-            }
-            .rbc-day-bg.rbc-off-range-bg {
-              background-color: #374151;
-            }
-            .rbc-header {
-              background-color: #1F2937;
-              color: #FFFFFF;
-              border-bottom: 1px solid #4B5563 !important;
-            }
-            .rbc-time-view {
-              background-color: #1F2937;
-            }
-            .rbc-time-header {
-              background-color: #1F2937;
-              color: #FFFFFF;
-            }
-            .rbc-time-content {
-              background-color: #1F2937;
-              color: #FFFFFF;
-            }
-            .rbc-time-slot {
-              color: #D1D5DB;
-            }
-            .rbc-today {
-              background-color: #4B5563;
-            }
-          `}
-        </style>
         <img src={studentImage} alt="Background" className="absolute inset-0 w-full h-full object-cover opacity-30" />
         <div className="relative max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
           <motion.h1
@@ -406,7 +238,6 @@ const StudentBooking = () => {
             Book Your Classes
           </motion.h1>
 
-          {/* Teachers Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -442,7 +273,6 @@ const StudentBooking = () => {
             )}
           </motion.div>
 
-          {/* Calendar Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -470,7 +300,6 @@ const StudentBooking = () => {
             />
           </motion.div>
 
-          {/* Available Slots Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -512,7 +341,6 @@ const StudentBooking = () => {
             )}
           </motion.div>
 
-          {/* Booked Classes Section */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -568,7 +396,6 @@ const StudentBooking = () => {
             )}
           </motion.div>
 
-          {/* Meeting Modal */}
           <Modal
             isOpen={showMeeting}
             onRequestClose={() => setShowMeeting(false)}
